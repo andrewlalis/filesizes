@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/filesizes
+filesizes.so
+filesizes.dylib
+filesizes.dll
+filesizes.a
+filesizes.lib
+filesizes-test-*
+*.exe
+*.o
+*.obj
+*.lst
