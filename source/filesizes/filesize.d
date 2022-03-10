@@ -1,3 +1,6 @@
+/** 
+ * Contains all basic filesize functions.
+ */
 module filesizes.filesize;
 
 import std.math : pow;
@@ -28,11 +31,13 @@ public struct SizeDenomination {
  */
 static enum Size : SizeDenomination {
     BYTES = SizeDenomination(1, "B", "Byte"),
+    // "Metric" units using powers of 1000.
     KILOBYTES = SizeDenomination(1000, "KB", "Kilobyte"),
     MEGABYTES = SizeDenomination(pow(1000, 2), "MB", "Megabyte"),
     GIGABYTES = SizeDenomination(pow(1000, 3), "GB", "Gigabyte"),
     TERABYTES = SizeDenomination(pow(1000, 4), "TB", "Terabyte"),
 
+    // "IEC" units using powers of 1024.
     KIBIBYTES = SizeDenomination(1024, "KiB", "Kibibyte"),
     MEBIBYTES = SizeDenomination(pow(1024, 2), "MiB", "Mebibyte"),
     GIBIBYTES = SizeDenomination(pow(1024, 3), "GiB", "Gibibyte"),
@@ -56,6 +61,8 @@ public class FilesizeParseException : Exception {
  * Params:
  *   s = The string to parse.
  * Returns: The parsed filesize, in bytes.
+ * Throws: A FilesizeParseException if the given string doesn't represent any
+ * valid filesize.
  */
 public ulong parseFilesize(string s) {
     import std.regex;
@@ -71,6 +78,7 @@ public ulong parseFilesize(string s) {
 
 unittest {
     assert("1 b".parseFilesize == 1);
+    assert("1B".parseFilesize == 1);
     assert("2 kb".parseFilesize == 2000);
     assert("1 kib".parseFilesize == 1024);
     assert("0.5 mb".parseFilesize == Size.MEGABYTES.sizeFactor / 2);
@@ -95,7 +103,9 @@ unittest {
  * "kilobyte", or "tibibytes".
  * Params:
  *   s = The string to parse.
- * Returns: 
+ * Returns: The denomination that matches the given string.
+ * Throws: A FilesizeParseException if the given string doesn't match any
+ * known filesize denomination.
  */
 public Size parseDenomination(string s) {
     import std.uni : toLower;
@@ -127,31 +137,42 @@ unittest {
 }
 
 /** 
- * 
+ * Produces a formatted filesize string for the given number of bytes and a
+ * size denomination.
  * Params:
- *   formatString = The format string for formatting the size number.
+ *   formatString = The format string for formatting the size number. This
+ *                  should be acceptable by the `std.string.format` function.
  *   byteSize = The total number of bytes.
  *   size = The denomination to use when representing the size.
  *   useAbbreviation = Whether to use the abbreviated unit name, or the full.
  * Returns: A string representation of the file size.
  */
 public string formatFilesize(string formatString, ulong byteSize, SizeDenomination size, bool useAbbreviation = true) {
-    double bytes = cast(double) byteSize / size.sizeFactor;
-    import std.string : format;
+    double value = cast(double) byteSize / size.sizeFactor;
+    import std.string : format, strip;
     string unit = useAbbreviation ? size.abbreviation : size.name;
-    if (!useAbbreviation && bytes != 1.0) {
+    string formattedValue = formatString.format(value).strip();
+    if (!useAbbreviation && formattedValue != "1") {
         unit ~= 's';
     }
-    return format(formatString ~ " %s", bytes, unit);
+    return formattedValue ~ ' ' ~ unit;
 }
 
 unittest {
-    assert(formatFilesize("%.0f", 42, Size.BYTES) == "42 B");
-    assert(formatFilesize("%.0f", 42, Size.BYTES, false) == "42 Bytes");
-    assert(formatFilesize("%.0f", 1, Size.BYTES, false) == "1 Byte");
-    assert(formatFilesize("%.1f", 512, Size.KIBIBYTES) == "0.5 KiB");
-    assert(formatFilesize("%.0f", 2000, Size.KILOBYTES) == "2 KB");
-    assert(formatFilesize("%.2f", 256, Size.KIBIBYTES) == "0.25 KiB");
+    void checkSize(string formatted, string expected) {
+        import std.string : format;
+        assert(formatted == expected, format!"Formatted string `%s` does not match expected `%s`."(formatted, expected));
+    }
+    import std.math : pow;
+    checkSize(formatFilesize("%.0f", 42, Size.BYTES), "42 B");
+    checkSize(formatFilesize("%.0f", 42, Size.BYTES, false), "42 Bytes");
+    checkSize(formatFilesize("%.0f", 1, Size.BYTES, false), "1 Byte");
+    checkSize(formatFilesize("%.1f", 512, Size.KIBIBYTES), "0.5 KiB");
+    checkSize(formatFilesize("%.0f", 2000, Size.KILOBYTES), "2 KB");
+    checkSize(formatFilesize("%.2f", 256, Size.KIBIBYTES), "0.25 KiB");
+    checkSize(formatFilesize("%.0f", 1024.pow(3), Size.GIGABYTES, false), "1 Gigabyte");
+    checkSize(formatFilesize("%.0f", 1024.pow(3), Size.GIBIBYTES, false), "1 Gibibyte");
+    checkSize(formatFilesize(92_874), "92.9 KB");
 }
 
 public string formatFilesize(string formatString, ulong byteSize, bool useAbbreviation = true, bool useMetric = true) {
@@ -171,7 +192,6 @@ public string formatFilesize(ulong byteSize, bool useAbbreviation = true, bool u
  * Returns: The best size to describe the given byte size.
  */
 public Size getAppropriateSize(ulong byteSize, bool useMetric = true) {
-    import std.traits : EnumMembers;
     Size[] availableSizes;
     if (useMetric) {
         availableSizes = [Size.BYTES, Size.KILOBYTES, Size.MEGABYTES, Size.GIGABYTES, Size.TERABYTES];
